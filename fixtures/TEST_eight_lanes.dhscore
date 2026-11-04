@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "id": "00000000-0000-4000-8000-000000000002",
+  "name": "TEST · 八轨与鼠标提示验证",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "duration": 18,
+  "sourceDuration": 18,
+  "segment": [
+    0,
+    18
+  ],
+  "bpm": 120,
+  "test": true,
+  "notes": [
+    {
+      "key": "Z",
+      "start": 1,
+      "duration": 0.2,
+      "mouse": "none"
+    },
+    {
+      "key": "X",
+      "start": 1.5,
+      "duration": 0.2,
+      "mouse": "left"
+    },
+    {
+      "key": "C",
+      "start": 2,
+      "duration": 0.2,
+      "mouse": "middle"
+    },
+    {
+      "key": "V",
+      "start": 2.5,
+      "duration": 0.2,
+      "mouse": "right"
+    },
+    {
+      "key": "B",
+      "start": 3,
+      "duration": 0.2,
+      "mouse": "none"
+    },
+    {
+      "key": "N",
+      "start": 3.5,
+      "duration": 0.2,
+      "mouse": "left"
+    },
+    {
+      "key": "M",
+      "start": 4,
+      "duration": 0.2,
+      "mouse": "middle"
+    },
+    {
+      "key": ",",
+      "start": 4.5,
+      "duration": 0.2,
+      "mouse": "right"
+    },
+    {
+      "key": "Z",
+      "start": 5,
+      "duration": 0.15,
+      "mouse": "none"
+    },
+    {
+      "key": "Z",
+      "start": 5.15,
+      "duration": 0.15,
+      "mouse": "none"
+    },
+    {
+      "key": "C",
+      "start": 6,
+      "duration": 1,
+      "mouse": "left"
+    },
+    {
+      "key": "V",
+      "start": 7,
+      "duration": 1,
+      "mouse": "left"
+    },
+    {
+      "key": "M",
+      "start": 15,
+      "duration": 2,
+      "mouse": "right"
+    }
+  ]
+}

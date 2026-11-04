@@ -1,0 +1,40 @@
+Add-Type -AssemblyName System.Drawing
+$iconRoot = Join-Path (Get-Location) 'assets'
+New-Item -ItemType Directory -Path $iconRoot -Force | Out-Null
+$bitmap = [System.Drawing.Bitmap]::new(256,256)
+$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+$graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+$graphics.Clear([System.Drawing.Color]::FromArgb(255,249,247,252))
+$outline = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(255,167,123,209),9)
+$outline.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+$triangle = [System.Drawing.PointF[]]@([System.Drawing.PointF]::new(128,35),[System.Drawing.PointF]::new(232,218),[System.Drawing.PointF]::new(24,218))
+$graphics.DrawPolygon($outline,$triangle)
+$highlight = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(255,200,167,234),9)
+$highlight.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+$highlight.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+$graphics.DrawLine($highlight,89,165,89,192)
+$graphics.DrawLine($highlight,128,124,128,192)
+$graphics.DrawLine($highlight,167,165,167,192)
+$png = [System.IO.MemoryStream]::new()
+$bitmap.Save($png,[System.Drawing.Imaging.ImageFormat]::Png)
+[System.IO.File]::WriteAllBytes((Join-Path $iconRoot 'icon.png'),$png.ToArray())
+$stream = [System.IO.File]::Create((Join-Path $iconRoot 'icon.ico'))
+$writer = [System.IO.BinaryWriter]::new($stream)
+$writer.Write([uint16]0)
+$writer.Write([uint16]1)
+$writer.Write([uint16]1)
+$writer.Write([byte]0)
+$writer.Write([byte]0)
+$writer.Write([byte]0)
+$writer.Write([byte]0)
+$writer.Write([uint16]1)
+$writer.Write([uint16]32)
+$writer.Write([uint32]$png.Length)
+$writer.Write([uint32]22)
+$writer.Write($png.ToArray())
+$writer.Dispose()
+$png.Dispose()
+$highlight.Dispose()
+$outline.Dispose()
+$graphics.Dispose()
+$bitmap.Dispose()

@@ -1,0 +1,87 @@
+import { _electron as electron } from 'playwright';
+import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, readFile } from 'node:fs/promises';
+import path from 'node:path';
+const root=process.cwd();await mkdir('artifacts',{recursive:true});
+const data=await mkdtemp(path.join(root,'artifacts','smoke-data-'));
+const env={...process.env,DHA_DATA_DIR:data};delete env.ELECTRON_RUN_AS_NODE;delete env.DHA_DEV_URL;
+const packaged=process.argv.includes('--packaged');
+const pkg=JSON.parse(await readFile('package.json','utf8'));
+const instance=await electron.launch({...(packaged?{executablePath:path.resolve(root,pkg.build.directories.output,'win-unpacked','Delta Harmonica Assistant.exe'),args:[]}:{args:['.']}),cwd:root,env,timeout:30000});
+const errors=[];instance.on('window',w=>w.on('pageerror',e=>errors.push(e.message)));
+try{
+  const page=await instance.firstWindow();await page.waitForSelector('.library-main');
+  await page.waitForFunction(()=>{const node=document.querySelector('.cover-image');return node instanceof HTMLImageElement&&node.complete&&node.naturalWidth>0;});
+  await page.screenshot({path:'artifacts/library.png'});
+  assert.ok((await page.locator('h1').textContent()).startsWith('我的曲库'));
+  let boot=await page.evaluate(()=>window.dha.call('bootstrap'));
+  const storagePaths=await instance.evaluate(({app})=>({user:app.getPath('userData'),session:app.getPath('sessionData')}));
+  assert.ok(storagePaths.user.startsWith(data));assert.ok(storagePaths.session.startsWith(data));
+  assert.equal(boot.library.scores.length,0);assert.ok(boot.library.settings.mapping.every(n=>n===null));
+  // Native file dialogs are stubbed inside this test process only; actual parsing and IPC are used.
+  const midi=path.join(root,'fixtures/TEST_neon_timing.mid');
+  await instance.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},midi);
+  await page.getByRole('button',{name:'导入曲谱',exact:true}).click();await page.waitForSelector('.track-options');
+  assert.equal(await page.locator('.track-option').count(),2);
+  assert.equal(await page.getByRole('button',{name:'保存到曲库'}).isDisabled(),true);
+  await page.screenshot({path:'artifacts/midi-import.png'});
+  // Explicitly synthetic test calibration, isolated from user data and never a product default.
+  await page.evaluate(async()=>{const b=await window.dha.call('bootstrap');await window.dha.call('settings',{...b.library.settings,mapping:[60,62,64,65,67,69,71,72],offsets:{left:-1,middle:1,right:12}});});
+  await page.getByRole('button',{name:'保存到曲库'}).click();await page.waitForSelector('.score-row');
+  boot=await page.evaluate(()=>window.dha.call('bootstrap'));assert.equal(boot.library.scores.length,1);assert.equal(boot.library.scores[0].test,true);assert.ok(boot.library.scores[0].timing);
+  const id=boot.library.scores[0].id;
+  await page.locator('.score-row').getByRole('button',{name:`Play ${boot.library.scores[0].name}`,exact:true}).click();
+  await page.waitForSelector('.performance-panel');
+  await page.waitForFunction(async()=>{const b=await window.dha.call('bootstrap');return b.transport.state==='countdown';});
+  const overlay=await instance.waitForEvent('window',{predicate:async w=>new URL(w.url()).searchParams.has('overlay'),timeout:5000}).catch(()=>instance.windows().find(w=>w!==page));
+  assert.ok(overlay);await overlay.waitForSelector('canvas');
+  await overlay.waitForFunction(()=>getComputedStyle(document.documentElement).backgroundColor==='rgba(0, 0, 0, 0)');
+  await overlay.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  const props=await instance.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().map(w=>({overlay:w.webContents.getURL().includes('overlay=1'),title:w.getTitle(),background:w.getBackgroundColor(),top:w.isAlwaysOnTop(),parent:!!w.getParentWindow()})));
+  console.log('Window properties:',JSON.stringify(props));
+  const overlayProps=props.find(p=>p.overlay);assert.ok(overlayProps);assert.ok(overlayProps.top);assert.equal(overlayProps.parent,false);
+  const alpha=await instance.evaluate(async({BrowserWindow})=>{const win=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('overlay=1'));const bitmap=(await win.capturePage()).toBitmap();let transparent=0,visible=0;for(let i=3;i<bitmap.length;i+=4){if(bitmap[i]===0)transparent++;if(bitmap[i]>0)visible++;}return {transparent,visible};});
+  console.log('Overlay alpha:',JSON.stringify(alpha));
+  await overlay.screenshot({path:'artifacts/overlay.png'});
+  assert.ok(alpha.transparent>0,'Overlay must contain real transparent pixels');assert.ok(alpha.visible>0,'Overlay notes and keys must render');
+  await page.waitForFunction(async()=>{const b=await window.dha.call('bootstrap');return b.transport.state==='playing';},{timeout:10000});
+  await page.evaluate(()=>window.dha.call('transport',{action:'pause'}));
+  const paused=await page.evaluate(()=>window.dha.call('bootstrap'));assert.equal(paused.transport.state,'paused');
+  await page.evaluate(()=>window.dha.call('transport',{action:'resume'}));
+  assert.equal((await page.evaluate(()=>window.dha.call('bootstrap'))).transport.state,'playing');
+  await page.evaluate(()=>window.dha.call('transport',{action:'seek',value:3}));
+  assert.equal((await page.evaluate(()=>window.dha.call('bootstrap'))).transport.state,'playing');
+  await page.screenshot({path:'artifacts/performance.png'});await overlay.screenshot({path:'artifacts/overlay.png',omitBackground:true});
+  await instance.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>!w.getTitle().includes('Overlay'))?.minimize());
+  assert.ok((await instance.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.getTitle().includes('Overlay'))?.isVisible())));
+  await instance.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>!w.getTitle().includes('Overlay'))?.restore());
+  // Export contains no file identity, MIDI binary, or stored pitches.
+  const exported=path.join(data,'roundtrip.dhscore');
+  await instance.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},exported);
+  await page.evaluate(scoreId=>window.dha.call('score.export',scoreId),id);
+  const score=JSON.parse(await readFile(exported,'utf8'));assert.equal(score.sourceId,undefined);assert.ok(score.notes.every(n=>n.midi===undefined));
+  // Shareable score roundtrip and full backup/restore use the same production IPC.
+  await instance.evaluate(({dialog})=>{dialog.showMessageBox=async()=>({response:0,checkboxChecked:false});});
+  const imported=await page.evaluate(file=>window.dha.call('file.drop',file),exported);assert.equal(imported.kind,'score');assert.equal(imported.scores.length,2);
+  const copyId=imported.scores.find(s=>s.id!==id).id;
+  await page.evaluate(async copy=>{const scores=await window.dha.call('score.delete',copy);if(scores.length!==2)throw new Error('Cancel deletion must preserve scores');},copyId);
+  const backupPath=path.join(data,'test-backup.json');
+  await instance.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},backupPath);
+  await page.evaluate(()=>window.dha.call('backup'));
+  await instance.evaluate(({dialog})=>{dialog.showMessageBox=async()=>({response:1,checkboxChecked:false});});
+  await page.evaluate(copy=>window.dha.call('score.rename',{id:copy,name:'TEST - Renamed'}),copyId);
+  await page.evaluate(copy=>window.dha.call('score.delete',copy),copyId);
+  assert.equal((await page.evaluate(()=>window.dha.call('bootstrap'))).library.scores.length,1);
+  await instance.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},backupPath);
+  const restored=await page.evaluate(()=>window.dha.call('restore'));assert.equal(restored.scores.length,2);
+  assert.equal(JSON.parse(await readFile(path.join(data,'before-restore.json'),'utf8')).library.scores.length,1);
+  await page.evaluate(()=>window.dha.call('overlay.close'));
+  // Language, mapping, appearance and persistence settings through real UI.
+  await page.getByRole('button',{name:'偏好设置',exact:true}).click();
+  await page.getByRole('button',{name:'语言与数据',exact:true}).click();
+  await page.locator('select').selectOption('en');await page.getByRole('heading',{name:'Preferences',exact:true}).waitFor();
+  await page.screenshot({path:'artifacts/settings.png'});
+  const saved=JSON.parse(await readFile(path.join(data,'library.json'),'utf8'));assert.equal(saved.settings.language,'en');assert.equal(saved.scores.length,2);
+  assert.deepEqual(errors,[]);
+  console.log(JSON.stringify({ok:true,packaged,screenshots:['library','midi-import','performance','overlay','settings'],gameDetectionAvailable:boot.gameDetectionAvailable,isolatedData:data},null,2));
+}finally{await instance.close();}

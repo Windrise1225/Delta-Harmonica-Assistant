@@ -147,3 +147,9 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Local desktop artifacts and private user data
+dist-electron/
+release/
+data/
+artifacts/
