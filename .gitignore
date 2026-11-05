@@ -153,3 +153,21 @@ dist-electron/
 release/
 data/
 artifacts/
+
+# Release archives, local backups, raw audio and editor/private configuration
+*.zip
+*.partial
+*.tmp
+*.bak
+*.wav
+*.mp3
+*.flac
+*.m4a
+*.ogg
+*.aac
+*.pem
+*.key
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store

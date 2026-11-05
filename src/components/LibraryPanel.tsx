@@ -1,4 +1,4 @@
-import { useEffect,useRef,useState } from 'react';
+import { useEffect,useLayoutEffect,useRef,useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus,Search,ArrowUpDown,Play,MoreHorizontal,Download,Pencil,Trash2,ImagePlus,RefreshCw,RotateCcw,ArrowUpRight,ShieldCheck,Keyboard,ArrowRight,Music2,Clock3 } from 'lucide-react';
 import type { Score } from '../core/schema';
@@ -15,6 +15,14 @@ export function LibraryPanel({scores,filtered,covers,search,setSearch,sort,setSo
   const played=scores.filter(s=>s.lastUsed),hasPlayed=played.length>0;
   const recent=[...(hasPlayed?played:scores)].sort((a,b)=>(b.lastUsed??b.createdAt).localeCompare(a.lastUsed??a.createdAt)).slice(0,3);
   const closeMenu=()=>{setMenu(null);trigger.current?.focus();};
+  // Font scaling changes menu dimensions; clamp its measured bounds to the window.
+  useLayoutEffect(()=>{
+    if(!menu||!menuRef.current)return;
+    const bounds=menuRef.current.getBoundingClientRect();
+    const left=Math.max(12,Math.min(menu.left,window.innerWidth-bounds.width-12));
+    const top=Math.max(12,Math.min(menu.top,window.innerHeight-bounds.height-12));
+    if(left!==menu.left||top!==menu.top)setMenu({...menu,left,top});
+  },[menu]);
   useEffect(()=>{if(!menu)return;menuRef.current?.querySelector<HTMLButtonElement>('button')?.focus();const key=(e:KeyboardEvent)=>{if(e.key==='Escape')closeMenu();if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();const buttons=Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('button')??[]),index=buttons.indexOf(document.activeElement as HTMLButtonElement);buttons[e.key==='Home'?0:e.key==='End'?buttons.length-1:(index+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length]?.focus();}if(e.key==='Tab')closeMenu();};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[menu]);
   const more=(score:Score,e:React.MouseEvent<HTMLButtonElement>)=>{const rect=e.currentTarget.getBoundingClientRect();trigger.current=e.currentTarget;setMenu({score,left:Math.max(12,Math.min(rect.right-220,window.innerWidth-232)),top:Math.max(12,Math.min(rect.bottom+8,window.innerHeight-335))});};
   const art=async(method:string,score:Score)=>{closeMenu();setArtBusy(true);try{onCovers(await api.call<Record<string,Cover>>(method,{id:score.id}));}catch(e){onError((e as Error).message);}finally{setArtBusy(false);}};

@@ -3,12 +3,14 @@ import { KEYS, type Score, type Settings, type Transport } from '../core/schema'
 import { formatTime, noteGeometry, positionAt } from '../core/timeline';
 import { beatLines, bpmAt } from '../core/beats';
 import { mouseHolds } from '../core/mapping';
+import { createNoteLabelPainter, noteLabelHeight, noteLabelTops } from './noteLabels';
 type Props={score:Score;settings:Settings;transport?:Transport;preview?:boolean;surface?:'light'|'overlay'};
 export function NoteField({score,settings,transport,preview=false,surface='overlay'}:Props){
   const canvas=useRef<HTMLCanvasElement>(null);
   const state=useRef({score,settings,transport,preview,surface});state.current={score,settings,transport,preview,surface};
   useEffect(()=>{
     const node=canvas.current!;const ctx=node.getContext('2d',{alpha:true})!;
+    const paintNoteLabel=createNoteLabelPainter(ctx);
     let width=0,height=0,raf=0,last=0,origin=performance.now();
     let previousScore:Score|undefined,previousContinuous:boolean|undefined,holds:ReturnType<typeof mouseHolds>=[];
     const observer=new ResizeObserver(([entry])=>{width=entry.contentRect.width;height=entry.contentRect.height;const ratio=Math.min(window.devicePixelRatio||1,2);node.width=Math.round(width*ratio);node.height=Math.round(height*ratio);ctx.setTransform(ratio,0,0,ratio,0,0);});observer.observe(node);
@@ -52,12 +54,24 @@ export function NoteField({score,settings,transport,preview=false,surface='overl
         ctx.shadowColor=color;ctx.shadowBlur=isPreview?4:7;ctx.fillStyle=glass;ctx.beginPath();ctx.roundRect(x,y,w,h,Math.min(6,h/2));ctx.fill();ctx.shadowBlur=0;
         ctx.strokeStyle=color+'ed';ctx.lineWidth=1;ctx.stroke();
         ctx.fillStyle='#ffffff7a';ctx.fillRect(x+3,y+2,Math.max(0,w-6),Math.min(2,Math.max(0,h-3)));
-        if(note.mouse!=='none'){
-          const my=Math.min(line-15,Math.max(top+10,g.bottom-11)),mx=x+w/2;
-          ctx.globalAlpha=1;ctx.fillStyle=light?'#ffffffeb':'#302436d9';ctx.strokeStyle=note.mouse==='left'?'#c391bb':note.mouse==='right'?'#a785c9':'#b29aa4';ctx.lineWidth=1;
-          ctx.beginPath();ctx.roundRect(mx-14,my-9,28,17,4);ctx.fill();ctx.stroke();
-          ctx.fillStyle=ctx.strokeStyle;ctx.font=`600 ${isPreview?8:10}px Segoe UI`;ctx.textAlign='center';ctx.fillText(note.mouse==='left'?'L ↓':note.mouse==='right'?'R ↑':'M ±',mx,my+3);
-        }
+      }
+      const labels: {note:typeof s.notes[number];laneIndex:number;headY:number;labelTop:number}[]=[];
+      for(const note of visible){
+        if(note.start>at+p.leadTime+.2)break;
+        if(note.start+note.duration<at)continue;
+        const g=noteGeometry(note.start,note.duration,at,p.leadTime,line,top);
+        if(g.bottom<top||g.y>line)continue;
+        const i=KEYS.indexOf(note.key);
+        labels.push({note,laneIndex:i,headY:g.bottom,labelTop:0});
+      }
+      for(let i=0;i<8;i++){
+        const sameLane=labels.filter(label=>label.laneIndex===i);
+        const tops=noteLabelTops(sameLane.map(label=>label.headY),noteLabelHeight(lane),top,line);
+        sameLane.forEach((label,index)=>{label.labelTop=tops[index];});
+      }
+      // All bodies, then badges, then text: material must not cover another key.
+      for(const layer of ['background','content'] as const)for(const label of labels){
+        paintNoteLabel(label.note,{centerX:padding+(label.laneIndex+.5)*lane,headY:label.headY,labelTop:label.labelTop,laneWidth:lane,bodyWidth:lane*.68,top,line},light,layer);
       }
       ctx.restore();ctx.globalAlpha=1;
       const breathe=.65+.25*Math.sin(now/750);

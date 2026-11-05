@@ -1,4 +1,4 @@
-# Delta Harmonica Assistant
+# Delta Harmonica Assistant v0.1.0
 
 Windows 11 口琴 **MIDI 视觉辅助工具**。Lavender Liquid Glass：珍珠白与薰衣草液态玻璃界面，跟随 8 轨音符手动演奏。
 
@@ -6,13 +6,16 @@ Windows 11 口琴 **MIDI 视觉辅助工具**。Lavender Liquid Glass：珍珠�
 
 ## 运行便携版
 
-新版打开 `release/lavender/win-unpacked/Delta Harmonica Assistant.exe`。为保留旧版数据，本次使用独立输出目录，原 `release/win-unpacked/data` 不改动。需要继续使用旧曲库时，将旧版整个 `data` 文件夹复制到新版 EXE 同目录，或使用软件的备份恢复。整个 `win-unpacked` 文件夹一起移动或压缩分享，不能只复制 EXE；无需安装 Node.js 或 Python。请放在可写入的位置。曲谱与设置存储于 EXE 同目录的 `data/library.json`，封面图片位于 `data/covers`，运行缓存与日志位于 `data/runtime`。
+下载完整的 `Delta-Harmonica-Assistant-0.1.0-win-x64.zip`，先解压，再打开其中 `win-unpacked/Delta Harmonica Assistant.exe`。本地构建目录为 `release/v0.1.0/win-unpacked/`。必须保留 EXE、resources、locales、DLL、PAK 等全部文件；无需安装 Node.js、Python 或开发环境。请放在可写目录，不能直接从压缩包内启动。
+
+首次启动为空曲库，校准值全部留空。曲谱与设置存储于 EXE 同目录的 `data/library.json`，封面在 `data/covers`，缓存和日志在 `data/runtime` 与 `data/app.log`。升级前请退出软件并备份旧版整个 `data` 文件夹，再复制到新版 EXE 同目录，或使用软件备份恢复。发布包不携带用户数据。
 
 1. 启动默认进入曲库，点击「导入曲谱」或拖入 `.mid`、`.midi`、`.dhscore`。
 2. 多轨 MIDI 按单音比例、音区、轨道名自动推荐旋律轨道，可手动选择。打击乐不参与推荐；同轨和弦保留高声部，重复同键保留独立音符。
 3. 在「偏好设置 → 游戏音高校准」填写**经过游戏实测**的 MIDI 音高和鼠标偏移。默认全部空白，不假定自然音阶、连续半音或鼠标偏移；无法确认的音符跳过。无可靠映射时禁止保存空曲谱。
 4. 保存后点击曲谱的播放按钮，3 秒倒计时后跟随下落音符。鼠标提示 `L ↓ / M ± / R ↑` 与键盘同时按住到音符结束。
-5. 默认鼠标穿透；在覆盖窗口设置关闭穿透后，拖动窗口顶部移动、拖右下角缩放。可锁定，或直接输入位置和尺寸。选用无边框游戏窗口；软件不会修改游戏设置。
+5. ×、演奏空间的关闭按钮和 `Ctrl + Shift + F10` 均会关闭覆盖窗口并暂停曲谱；重新打开窗口后点击继续可保留原进度。快捷键仅在窗口打开时注册，占用时会提示使用按钮。
+6. 默认鼠标穿透；在覆盖窗口设置关闭穿透后，拖动窗口顶部移动、拖右下角缩放。可锁定，或直接输入位置和尺寸。选用无边框游戏窗口；软件不会修改游戏设置。
 
 无需校准即可点击「体验下落效果」查看明确标记的内置动画测试，或导入随包「测试曲谱」中的 `TEST_eight_lanes.dhscore`。测试数据不代表实测游戏音高。说明见 [fixtures/README.md](fixtures/README.md)。
 
@@ -48,7 +51,7 @@ UI、MIDI、校验代码打包进产物，仅 `koffi` 作为外置原生运行�
 
 ## 开发与验证
 
-所有依赖本地安装，无全局安装：
+开发需要 Node.js 22.12 或更高版本。发布的便携版无需这些开发环境。所有依赖本地安装，无全局安装：
 
 ```powershell
 npm ci
@@ -76,3 +79,9 @@ npm run smoke:ui -- --packaged
 - 不保证任意 MIDI 都能映射到尚未校准的 8 键。DHScore v1 继续兼容，新增可选 `timing` 仅用于变速节拍；详见 [docs/FORMAT.md](docs/FORMAT.md)。
 
 模块：`src/core`（格式 / MIDI / 映射 / 时间轴）、`src/components`（界面 / Canvas）、`src/Overlay.tsx`（覆盖页）、`electron/main.ts`（窗口 / IPC）、`electron/storage.ts`（存储）、`electron/game.ts`（可选游戏检测）、`scripts`（开发 / 验证 / 打包）。
+
+## 首次发布验收
+
+`npm run package` 沿用 electron-builder + portable.mjs 流程，同时生成完整运行目录、便携 ZIP 和 SHA-256 校验文件。发布输出在 `release/v0.1.0/`。重新打包会清理该输出目录，因此不要把日常曲库放在构建输出内。开发依赖由 package-lock.json 锁定。
+
+见 [更新记录](CHANGELOG.md)、[已知限制与人工验收](KNOWN_ISSUES.md)。当前仅准备发布候选包，GitHub 源码与 Release 等人工验收后上传。

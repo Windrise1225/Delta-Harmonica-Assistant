@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, screen, session, protocol } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, screen, session, protocol, globalShortcut } from 'electron';
 import path from 'node:path';
 import { readFile, writeFile, mkdir, stat, realpath } from 'node:fs/promises';
 import { mkdirSync } from 'node:fs';
@@ -14,6 +14,12 @@ import { testScore } from '../src/core/demo';
 import { CoverFiles,ensureCovers,freshCover } from './covers';
 import { coverSchema } from '../src/core/schema';
 let main:BrowserWindow|null=null,overlay:BrowserWindow|null=null;
+// A packaged portable app always loads its bundled files, even if a developer
+// has left DHA_DEV_URL set in the environment.
+const developmentUrl=app.isPackaged?undefined:process.env.DHA_DEV_URL;
+const overlayCloseAccelerator='Control+Shift+F10';
+let overlayCloseShortcutRegistered=false;
+const overlayStatus=()=>({open:!!overlay&&!overlay.isDestroyed(),closeShortcut:overlayCloseShortcutRegistered?'Ctrl + Shift + F10':null});
 let store:Store,coverFiles:CoverFiles,library:Library={settings:structuredClone(defaults),scores:[],covers:{}};
 let transport:Transport=structuredClone(emptyTransport);
 let game:GameMonitor|null=null, seenGame=false, gameFound=false, gameFocused=false;
@@ -37,18 +43,24 @@ app.commandLine.appendSwitch('disable-component-update');
 protocol.registerSchemesAsPrivileged([{scheme:'dha-cover',privileges:{standard:true,secure:true,supportFetchAPI:true}}]);
 const loadWindow=(win:BrowserWindow,overlayMode=false)=>{
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
-  win.webContents.on('will-navigate',(event,url)=>{const target=process.env.DHA_DEV_URL||'file://';if(!url.startsWith(target))event.preventDefault();});
-  if(process.env.DHA_DEV_URL)void win.loadURL(process.env.DHA_DEV_URL+(overlayMode?'/?overlay=1':''));
+  win.webContents.on('will-navigate',(event,url)=>{const target=developmentUrl||'file://';if(!url.startsWith(target))event.preventDefault();});
+  if(developmentUrl)void win.loadURL(developmentUrl+(overlayMode?'/?overlay=1':''));
   else void win.loadFile(path.join(__dirname,'../dist/index.html'),overlayMode?{query:{overlay:'1'}}:{});
 };
 function overlaySettings(){
   if(!overlay)return;
   const s=library.settings;
+  overlay.setFocusable(!s.clickThrough);
+  overlay.setSkipTaskbar(true);
   overlay.setIgnoreMouseEvents(s.clickThrough,{forward:true});
   overlay.setMovable(!s.locked&&!s.clickThrough);
   overlay.setAlwaysOnTop(true,'screen-saver');
   if(s.focusBehavior==='hide'&&gameFound&&!gameFocused)overlay.hide();
   else if(!overlay.isVisible())overlay.showInactive();
+}
+function closeOverlayAndPause(){
+  changeTransport('pause');
+  overlay?.close();
 }
 function openOverlay(){
   if(overlay){overlaySettings();return;}
@@ -59,10 +71,14 @@ function openOverlay(){
   const proposed=s.overlayBounds??{x:area.x+Math.round(area.width*.15),y:area.y+30,width:Math.round(area.width*.7),height:Math.round(area.height*.68)};
   const visible=screen.getAllDisplays().some(d=>proposed.x+proposed.width>d.workArea.x&&proposed.x<d.workArea.x+d.workArea.width&&proposed.y+proposed.height>d.workArea.y&&proposed.y<d.workArea.y+d.workArea.height);
   const bounds=visible?proposed:{...proposed,x:area.x+30,y:area.y+30};
-  overlay=new BrowserWindow({...bounds,minWidth:480,minHeight:280,frame:false,transparent:true,backgroundColor:'#00000000',resizable:false,hasShadow:false,alwaysOnTop:true,skipTaskbar:true,show:false,focusable:false,title:'Delta Harmonica · Overlay',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,backgroundThrottling:false}});
+  overlay=new BrowserWindow({...bounds,minWidth:480,minHeight:280,frame:false,transparent:true,backgroundColor:'#00000000',resizable:false,hasShadow:false,alwaysOnTop:true,skipTaskbar:true,show:false,focusable:!s.clickThrough,title:'Delta Harmonica · Overlay',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,backgroundThrottling:false}});
+  // Only claim the global shortcut while the overlay exists. It works even
+  // when the overlay is click-through and the game owns keyboard focus.
+  overlayCloseShortcutRegistered=globalShortcut.register(overlayCloseAccelerator,closeOverlayAndPause);
+  broadcast('overlay',overlayStatus());
   let moveSave:NodeJS.Timeout;
   overlay.on('moved',()=>{clearTimeout(moveSave);moveSave=setTimeout(()=>{if(overlay){library.settings.overlayBounds=overlay.getBounds();void save();broadcast('settings',library.settings);}},300);});
-  overlay.on('closed',()=>{clearTimeout(moveSave);overlay=null;});
+  overlay.on('closed',()=>{clearTimeout(moveSave);overlay=null;if(overlayCloseShortcutRegistered)globalShortcut.unregister(overlayCloseAccelerator);overlayCloseShortcutRegistered=false;broadcast('overlay',overlayStatus());});
   overlay.once('ready-to-show',()=>{overlaySettings();emitTransport();});
   loadWindow(overlay,true);
 }
@@ -88,9 +104,9 @@ async function importFile(file:string){
   return {kind:'midi',document};
 }
 async function handle(method:string,payload:unknown,fromOverlay:boolean):Promise<unknown>{
-  if(fromOverlay&&!['bootstrap','overlay.resize','overlay.resizeEnd'].includes(method))fail('覆盖窗口无权执行此操作。');
+  if(fromOverlay&&!['bootstrap','overlay.resize','overlay.resizeEnd','overlay.close'].includes(method))fail('覆盖窗口无权执行此操作。');
   switch(method){
-    case 'bootstrap':return {library,transport,displays:screen.getAllDisplays().map(d=>({id:d.id,label:d.label||`${d.size.width} × ${d.size.height}`,scaleFactor:d.scaleFactor})),version:app.getVersion(),dataPath:store.root,gameDetectionAvailable:game!==null};
+    case 'bootstrap':return {library,transport,overlay:overlayStatus(),displays:screen.getAllDisplays().map(d=>({id:d.id,label:d.label||`${d.size.width} × ${d.size.height}`,scaleFactor:d.scaleFactor})),version:app.getVersion(),dataPath:store.root,gameDetectionAvailable:game!==null};
     case 'cover.list':return library.covers;
     case 'settings':{
       const previous=library.settings;
@@ -167,7 +183,7 @@ async function handle(method:string,payload:unknown,fromOverlay:boolean):Promise
       const next={...library,covers:{...library.covers,[p.id]:coverSchema.parse(cover)}};await store.save(next);library=next;return library.covers;
     }
     case 'overlay.open':openOverlay();return true;
-    case 'overlay.close':overlay?.close();return;
+    case 'overlay.close':closeOverlayAndPause();return;
     case 'overlay.resize':{
       if(!overlay||library.settings.locked||library.settings.clickThrough)return;
       if(dragTimer)clearInterval(dragTimer);
@@ -204,8 +220,9 @@ else {
       });
       try{game=new GameMonitor();}catch(e){await store.log('游戏窗口检测不可用',e);}
       session.defaultSession.setPermissionRequestHandler((_w,_p,callback)=>callback(false));
-      session.defaultSession.webRequest.onHeadersReceived((details,callback)=>callback({responseHeaders:{...details.responseHeaders,'Content-Security-Policy':["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: dha-cover:; connect-src 'self' http://127.0.0.1:5173 ws://127.0.0.1:5173; media-src 'none'; object-src 'none'"]}}));
-      session.defaultSession.webRequest.onBeforeRequest((details,callback)=>{const url=new URL(details.url);callback({cancel:['http:','https:','ws:','wss:'].includes(url.protocol)&&!(process.env.DHA_DEV_URL&&url.hostname==='127.0.0.1'&&url.port==='5173')});});
+      const connectPolicy=developmentUrl?"'self' http://127.0.0.1:5173 ws://127.0.0.1:5173":"'none'";
+      session.defaultSession.webRequest.onHeadersReceived((details,callback)=>callback({responseHeaders:{...details.responseHeaders,'Content-Security-Policy':[`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: dha-cover:; connect-src ${connectPolicy}; media-src 'none'; object-src 'none'`]}}));
+      session.defaultSession.webRequest.onBeforeRequest((details,callback)=>{const url=new URL(details.url);callback({cancel:['http:','https:','ws:','wss:'].includes(url.protocol)&&!(developmentUrl&&url.hostname==='127.0.0.1'&&url.port==='5173')});});
       main=new BrowserWindow({width:1440,height:960,minWidth:1040,minHeight:720,frame:false,backgroundColor:'#F9F7FC',show:false,icon:path.join(__dirname,'../assets/icon.png'),title:'Delta Harmonica Assistant',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,spellcheck:false}});
       main.once('ready-to-show',()=>main?.show());
       main.on('closed',()=>{main=null;overlay?.destroy();app.quit();});
@@ -239,6 +256,8 @@ else {
   });
 }
 app.on('before-quit',event=>{
+  if(overlayCloseShortcutRegistered)globalShortcut.unregister(overlayCloseAccelerator);
+  overlayCloseShortcutRegistered=false;
   if(quitting)return;
   quitting=true;event.preventDefault();clearInterval(clockTimer);clearInterval(monitorTimer);if(dragTimer)clearInterval(dragTimer);
   void mutationTail.catch(()=>{}).then(()=>store?.flush()).catch(()=>{}).finally(()=>app.quit());

@@ -1,1 +1,66 @@
-:root{font-family:'Segoe UI Variable','Segoe UI','Microsoft YaHei UI','Microsoft YaHei',sans-serif;color:#302A36;background:#F9F7FC;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;--background:#F9F7FC;--white:#FFFFFF;--ambient:#F3ECFA;--lavender-light:#E9DDF7;--lavender:#C8A7EA;--accent:#A77BD1;--accent-deep:#8056AC;--text:#302A36;--text-secondary:#82778C;--border:#e7dbee;--line:#e9ddf77d;--input:#ffffffb3;--radius-control:11px;--radius-panel:22px;--motion-fast:180ms cubic-bezier(.2,.65,.3,1);--shadow-glass:0 9px 28px #8056ac0b,0 2px 5px #8056ac05}
+:root {
+  font-family: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  color: var(--text-heading);
+  background: var(--background);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --background: #F9F7FC;
+  --white: #FFFFFF;
+  --ambient: #F3ECFA;
+  --lavender-light: #E9DDF7;
+  --lavender: #C8A7EA;
+  --accent: #A77BD1;
+  --accent-deep: #8056AC;
+  --accent-action-light: #8962AF;
+  --accent-action-dark: #74499F;
+
+  /* Semantic text colors. Opacity belongs to materials, never text containers. */
+  --text-heading: #30263A;
+  --text-subheading: #40344C;
+  --text-body: #5F536B;
+  /* Slightly darker than #756A80 to retain AA contrast on tinted hover glass. */
+  --text-secondary: #6B6075;
+  --text-decorative: #82768E;
+  --text-disabled: #A49AAD;
+  --text-accent: var(--accent-deep);
+  --text-on-accent: var(--white);
+  --text-warning: #79536A;
+  --text-danger: #914466;
+  --text: var(--text-body);
+
+  --font-page: 34px;
+  --font-section: 24px;
+  --font-song: 19px;
+  --font-body: 16px;
+  --font-table: 15px;
+  --font-secondary: 14px;
+  --font-label: 12px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --line-body: 1.65;
+  --line-heading: 1.35;
+
+  --line: rgba(128, 86, 172, .16);
+  --border: rgba(128, 86, 172, .30);
+  --border-control: rgba(128, 86, 172, .48);
+  --surface-glass: rgba(255, 255, 255, .80);
+  --surface-thin: rgba(255, 255, 255, .78);
+  --surface-hover: rgba(233, 221, 247, .50);
+  --input: rgba(255, 255, 255, .88);
+  --focus-ring: rgba(128, 86, 172, .18);
+  --shadow-glass: 0 9px 28px #8056ac16, 0 2px 6px #8056ac0b;
+  --radius-control: 11px;
+  --radius-panel: 22px;
+  --motion-fast: 180ms cubic-bezier(.2, .65, .3, 1);
+
+  /* Component aliases keep control contrast independent of glass effects. */
+  --button-primary-bg: linear-gradient(145deg, var(--accent-action-light), var(--accent-deep) 65%, var(--accent-action-dark));
+  --button-primary-text: var(--text-on-accent);
+  --input-text: var(--text-body);
+  --input-placeholder: var(--text-secondary);
+  --transport-track: #9D7CB8;
+  --transport-thumb: var(--accent-deep);
+}
